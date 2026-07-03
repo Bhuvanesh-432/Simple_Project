@@ -1,0 +1,40 @@
+version: 0.0
+os: linux
+
+# ─────────────────────────────────────────────────────────────────────────────
+# AWS CodeDeploy appspec.yml — EC2 Ubuntu Deployment
+# ─────────────────────────────────────────────────────────────────────────────
+
+files:
+  - source: /
+    destination: /home/ubuntu/simple-project
+
+permissions:
+  - object: /home/ubuntu/simple-project/scripts
+    pattern: "*.sh"
+    owner: ubuntu
+    group: ubuntu
+    mode: "755"
+    type:
+      - file
+
+hooks:
+  ApplicationStop:
+    - location: scripts/stop_app.sh
+      timeout: 60
+      runas: root
+
+  BeforeInstall:
+    - location: scripts/install_dependencies.sh
+      timeout: 300
+      runas: root
+
+  AfterInstall:
+    - location: scripts/start_app.sh
+      timeout: 300
+      runas: root
+
+  ApplicationStart:
+    - location: scripts/health_check.sh
+      timeout: 180
+      runas: root

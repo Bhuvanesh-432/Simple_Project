@@ -1,0 +1,63 @@
+version: 0.2
+
+# ─────────────────────────────────────────────────────────────────────────────
+# AWS CodeBuild buildspec.yml  (EC2 Deployment)
+# Builds Docker images → Pushes to ECR → Passes artifacts to CodeDeploy EC2
+# ─────────────────────────────────────────────────────────────────────────────
+
+env:
+  variables:
+    AWS_DEFAULT_REGION: "us-east-1"
+    # Set these in CodeBuild environment variables:
+    # AWS_ACCOUNT_ID, ECR_REPO_FRONTEND, ECR_REPO_BACKEND
+
+phases:
+  pre_build:
+    commands:
+      - echo "=== Pre-Build: Logging in to Amazon ECR ==="
+      - aws ecr get-login-password --region $AWS_DEFAULT_REGION | docker login --username AWS --password-stdin $AWS_ACCOUNT_ID.dkr.ecr.$AWS_DEFAULT_REGION.amazonaws.com
+      - COMMIT_HASH=$(echo $CODEBUILD_RESOLVED_SOURCE_VERSION | cut -c 1-7)
+      - IMAGE_TAG=${COMMIT_HASH:-latest}
+      - FRONTEND_URI=$AWS_ACCOUNT_ID.dkr.ecr.$AWS_DEFAULT_REGION.amazonaws.com/$ECR_REPO_FRONTEND
+      - BACKEND_URI=$AWS_ACCOUNT_ID.dkr.ecr.$AWS_DEFAULT_REGION.amazonaws.com/$ECR_REPO_BACKEND
+      - echo "Building images with tag $IMAGE_TAG"
+
+  build:
+    commands:
+      - echo "=== Build: Building Docker Images ==="
+      - docker build -t $BACKEND_URI:latest  -t $BACKEND_URI:$IMAGE_TAG  ./backend
+      - docker build -t $FRONTEND_URI:latest -t $FRONTEND_URI:$IMAGE_TAG ./frontend
+
+  post_build:
+    commands:
+      - echo "=== Post-Build: Pushing images to ECR ==="
+      - docker push $BACKEND_URI:latest
+      - docker push $BACKEND_URI:$IMAGE_TAG
+      - docker push $FRONTEND_URI:latest
+      - docker push $FRONTEND_URI:$IMAGE_TAG
+
+      # Write .env file that EC2 scripts will use
+      - echo "=== Writing deploy environment file ==="
+      - |
+        cat > scripts/deploy.env << EOF
+        AWS_ACCOUNT_ID=$AWS_ACCOUNT_ID
+        AWS_DEFAULT_REGION=$AWS_DEFAULT_REGION
+        ECR_REPO_FRONTEND=$ECR_REPO_FRONTEND
+        ECR_REPO_BACKEND=$ECR_REPO_BACKEND
+        IMAGE_TAG=$IMAGE_TAG
+        FRONTEND_URI=$FRONTEND_URI
+        BACKEND_URI=$BACKEND_URI
+        EOF
+
+      - echo "=== Build complete! Image tag $IMAGE_TAG ==="
+
+artifacts:
+  files:
+    - appspec.yml
+    - docker-compose.prod.yml
+    - scripts/**/*
+  discard-paths: no
+
+cache:
+  paths:
+    - '/root/.npm/**/*'

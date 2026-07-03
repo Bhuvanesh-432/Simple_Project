@@ -1,0 +1,62 @@
+{
+  "family": "simple-project-task",
+  "networkMode": "awsvpc",
+  "requiresCompatibilities": ["FARGATE"],
+  "cpu": "512",
+  "memory": "1024",
+  "executionRoleArn": "arn:aws:iam::<AWS_ACCOUNT_ID>:role/ecsTaskExecutionRole",
+  "taskRoleArn": "arn:aws:iam::<AWS_ACCOUNT_ID>:role/ecsTaskRole",
+  "containerDefinitions": [
+    {
+      "name": "backend",
+      "image": "<AWS_ACCOUNT_ID>.dkr.ecr.<REGION>.amazonaws.com/simple-project-backend:latest",
+      "essential": true,
+      "portMappings": [
+        { "containerPort": 5000, "protocol": "tcp" }
+      ],
+      "environment": [
+        { "name": "NODE_ENV",  "value": "production" },
+        { "name": "PORT",      "value": "5000" },
+        { "name": "DB_PORT",   "value": "5432" },
+        { "name": "DB_NAME",   "value": "simpledb" },
+        { "name": "DB_SSL",    "value": "true" }
+      ],
+      "secrets": [
+        { "name": "DB_HOST",     "valueFrom": "arn:aws:ssm:<REGION>:<AWS_ACCOUNT_ID>:parameter/simple-project/DB_HOST" },
+        { "name": "DB_USER",     "valueFrom": "arn:aws:ssm:<REGION>:<AWS_ACCOUNT_ID>:parameter/simple-project/DB_USER" },
+        { "name": "DB_PASSWORD", "valueFrom": "arn:aws:ssm:<REGION>:<AWS_ACCOUNT_ID>:parameter/simple-project/DB_PASSWORD" }
+      ],
+      "logConfiguration": {
+        "logDriver": "awslogs",
+        "options": {
+          "awslogs-group":         "/ecs/simple-project",
+          "awslogs-region":        "<REGION>",
+          "awslogs-stream-prefix": "backend"
+        }
+      },
+      "healthCheck": {
+        "command": ["CMD-SHELL", "wget -qO- http://localhost:5000/health || exit 1"],
+        "interval": 30, "timeout": 5, "retries": 3, "startPeriod": 60
+      }
+    },
+    {
+      "name": "frontend",
+      "image": "<AWS_ACCOUNT_ID>.dkr.ecr.<REGION>.amazonaws.com/simple-project-frontend:latest",
+      "essential": true,
+      "portMappings": [
+        { "containerPort": 80, "protocol": "tcp" }
+      ],
+      "dependsOn": [
+        { "containerName": "backend", "condition": "HEALTHY" }
+      ],
+      "logConfiguration": {
+        "logDriver": "awslogs",
+        "options": {
+          "awslogs-group":         "/ecs/simple-project",
+          "awslogs-region":        "<REGION>",
+          "awslogs-stream-prefix": "frontend"
+        }
+      }
+    }
+  ]
+}

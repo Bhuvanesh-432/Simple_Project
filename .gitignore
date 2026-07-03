@@ -1,0 +1,10 @@
+# Git ignore file
+node_modules/
+.env
+*.log
+dist/
+build/
+.DS_Store
+*.pem
+.env.local
+.env.production

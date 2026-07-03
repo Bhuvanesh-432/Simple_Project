@@ -1,0 +1,55 @@
+version: '3.8'
+
+# ─────────────────────────────────────────────────────────────────────────────
+# docker-compose.prod.yml — EC2 Ubuntu Production Deployment
+# Images are pre-pulled from ECR by start_app.sh before this runs
+# ─────────────────────────────────────────────────────────────────────────────
+
+services:
+  # ── Backend API ───────────────────────────────────────────────────────────
+  backend:
+    image: ${BACKEND_IMAGE:-simple-project-backend:current}
+    container_name: simple_backend
+    restart: always
+    environment:
+      NODE_ENV:     production
+      PORT:         5000
+      DB_PORT:      5432
+      DB_NAME:      simpledb
+      DB_SSL:       "true"
+      # DB_HOST, DB_USER, DB_PASSWORD are injected from EC2 environment
+      # Set these in EC2 instance via SSM Parameter Store or instance user-data
+      DB_HOST:      ${DB_HOST}
+      DB_USER:      ${DB_USER}
+      DB_PASSWORD:  ${DB_PASSWORD}
+      FRONTEND_URL: ${FRONTEND_URL:-*}
+    ports:
+      - "5000:5000"
+    networks:
+      - app-network
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # ── Frontend (Nginx) ──────────────────────────────────────────────────────
+  frontend:
+    image: ${FRONTEND_IMAGE:-simple-project-frontend:current}
+    container_name: simple_frontend
+    restart: always
+    ports:
+      - "80:80"
+    depends_on:
+      - backend
+    networks:
+      - app-network
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+networks:
+  app-network:
+    driver: bridge
